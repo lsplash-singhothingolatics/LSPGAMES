@@ -272,12 +272,8 @@ select:focus,input:focus{border-color:var(--brand);outline:none}
         <span class="btn primary">Race</span>
       </div>
     </button>
-    <h2 class="section-title">Coming soon</h2>
-    <div class="grid">
-      <div class="gcard"><div class="thumb" style="background:#fff2d9">🧱</div><div class="meta"><h3>Block Tycoon</h3><p class="soon">In development</p></div></div>
-      <div class="gcard"><div class="thumb" style="background:#ffe6ea">🏃</div><div class="meta"><h3>Obby Rush</h3><p class="soon">In development</p></div></div>
-      <div class="gcard"><div class="thumb" style="background:#ece6ff">🚀</div><div class="meta"><h3>Sky Dash</h3><p class="soon">In development</p></div></div>
-    </div>
+    <h2 class="section-title">More games</h2>
+    <div class="grid" id="more-games"></div>
   </main>
 </section>
 
@@ -456,7 +452,7 @@ function enterHub(){
   $('#hello').textContent=`Hi, ${name}`;$('#avatar-btn').textContent=name[0].toUpperCase();
   $('#menu-email').textContent=profile.email;$('#menu-age').textContent=profile.dob?`Age ${ageOf(profile.dob)}`:'';
   $('#hub-progress').textContent=S.cleared>=MAXL?'All 15 levels cleared!':`Level ${S.unlocked} of ${MAXL} unlocked`;
-  refreshPoints();show('s-hub');requestAnimationFrame(drawHubArt);if(window.Kart)Kart.onHub();
+  refreshPoints();show('s-hub');requestAnimationFrame(drawHubArt);if(window.Kart)Kart.onHub();if(window.LSPG)LSPG.runHub();
 }
 $('#avatar-btn').onclick=e=>{e.stopPropagation();$('#menu').classList.toggle('open')};
 document.addEventListener('click',e=>{if(!e.target.closest('#menu'))$('#menu').classList.remove('open')});
@@ -707,5 +703,9 @@ function drawHubArt(){
 })();
 </script>
 <script src="kart.js"></script>
+<script src="common.js"></script>
+<script src="tycoon.js"></script>
+<script src="obby.js"></script>
+<script src="skydash.js"></script>
 </body>
 </html>
