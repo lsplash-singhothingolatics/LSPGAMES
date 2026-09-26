@@ -15,6 +15,8 @@
   .touch .gpad{display:flex}
   .kbtn.jump{width:104px;height:104px;border-radius:50%;background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 5px 0 var(--brand-d);font-size:18px}
   .statline{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .gscreen .help{animation:lspHelpFade .6s 6s forwards}
+  @keyframes lspHelpFade{to{opacity:0;visibility:hidden}}
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
@@ -30,7 +32,7 @@
   window.LSPG = {
     fmt,
     addCard(o) {
-      const grid = $('#more-games'); if (!grid) return;
+      const grid = $('#' + (o.grid || 'arcade-games')); if (!grid) return;
       const b = document.createElement('button');
       b.className = 'gcard play'; b.id = o.id;
       b.innerHTML = `<div class="thumb" style="background:${o.bg}">${o.emoji}</div><div class="meta"><h3>${o.title}</h3><p class="gdesc">${o.desc}</p><p class="prog" id="${o.id}-prog"></p></div>`;
@@ -78,6 +80,111 @@
         const btn = on ? '<button class="btn ghost" disabled>Equipped</button>' : has ? `<button class="btn primary" ${dataAttr}="${s.id}">Equip</button>` : `<button class="btn gold" ${dataAttr}="${s.id}" ${pts < s.cost ? 'disabled' : ''}>Buy for ⭐ ${s.cost.toLocaleString()}</button>`;
         return `<div class="item${on ? ' eq' : ''}"><div class="item-head"><div class="ico" style="background:${s.bg || '#eef3ff'}"><span style="display:block;width:26px;height:26px;border-radius:8px;background:${s.color};box-shadow:inset 0 -4px 0 rgba(0,0,0,.15)"></span></div><div><h3>${s.name}</h3><p>${s.cost ? 'Skin' : 'Free skin'}</p></div></div>${btn}</div>`;
       }).join('');
+    },
+
+    /* Per-user save: LSPG.store('name', defaults) -> { load(), save(data) } */
+    store(name, def) {
+      const key = () => 'lsp_' + name + '_' + profile.email;
+      const merge = (d, v) => { for (const k in d) { if (v[k] === undefined) v[k] = JSON.parse(JSON.stringify(d[k])); else if (d[k] && typeof d[k] === 'object' && !Array.isArray(d[k])) merge(d[k], v[k]); } return v; };
+      return { load: () => merge(def, store.get(key(), {}) || {}), save: (d) => store.set(key(), d) };
+    },
+    /* Game shell: lobby screen with tabs + full-screen play screen with canvas, HUD, pause, modal. */
+    makeGame(o) {
+      const k = o.key, tabs = o.tabs || [['play', 'Play']];
+      document.body.insertAdjacentHTML('beforeend', `
+      <section class="screen" id="s-${k}-l" style="overflow:auto">
+        <header class="topbar"><div class="topbar-in">
+          <button class="iconbtn" id="${k}-back" aria-label="Back to games">‹</button>
+          <h2 style="font-size:20px">${o.title}</h2><div class="spacer"></div>
+          <span class="pill" title="LSP points">⭐ <span class="js-points">0</span></span>
+        </div></header>
+        <main class="wrap">
+          ${tabs.length > 1 ? `<div class="tabs" role="tablist">${tabs.map(([id, l], i) => `<button class="tab${i ? '' : ' on'}" data-t="${id}" role="tab">${l}</button>`).join('')}</div>` : ''}
+          ${tabs.map(([id], i) => `<div class="gpanel${i ? '' : ' on'}" data-p="${id}" id="${k}-p-${id}"></div>`).join('')}
+        </main>
+      </section>
+      <section class="screen gscreen" id="s-${k}" style="${o.bg ? 'background:' + o.bg : ''}">
+        <canvas class="gcv" id="${k}-cv"></canvas>
+        <div class="hud"><button class="iconbtn" id="${k}-pause" aria-label="Pause">⏸</button>${o.hud || ''}</div>
+        ${o.padsL ? `<div class="gpad gpad-l">${o.padsL}</div>` : ''}${o.padsR ? `<div class="gpad gpad-r">${o.padsR}</div>` : ''}
+        ${o.help ? `<div class="help">${o.help}</div>` : ''}
+        ${o.rotate === false ? '' : '<div class="rotate hudpill">Turn your phone sideways for a bigger view</div>'}
+        <div class="modal" id="${k}-modal"><div class="modal-card"></div></div>
+      </section>`);
+      const api = { key: k, scr: $('#s-' + k), cv: $('#' + k + '-cv'), keys: {}, tin: {}, paused: false, over: false, raf: 0, view: { s: 1, ox: 0, oy: 0, d: 1 }, world: o.world || null };
+      api.g = api.cv.getContext('2d');
+      api.panel = (id) => $('#' + k + '-p-' + id);
+      api.setTab = LSPG.tabs('#s-' + k + '-l', (t) => { if (api.onTab) api.onTab(t); refreshPoints(); });
+      api.openLobby = (t) => { api.stop(); show('s-' + k + '-l'); api.setTab(t || tabs[0][0]); };
+      api.modal = (html, actions) => LSPG.modal(k + '-modal', html, actions);
+      api.closeModal = () => LSPG.closeModal(k + '-modal');
+      api.fit = () => {
+        const d = LSPG.fit(api.cv), v = api.view; v.d = d; v.w = api.cv.width; v.h = api.cv.height;
+        const touch = api.scr.classList.contains('touch');
+        v.top = 58 * d; v.bottom = (touch && o.padReserve ? o.padReserve : 8) * d;
+        if (api.world) { const W = api.world.w, H = api.world.h; v.s = Math.min(v.w / W, (v.h - v.top - v.bottom) / H); v.ox = (v.w - W * v.s) / 2; v.oy = v.top + (v.h - v.top - v.bottom - H * v.s) / 2; }
+        api.scr.classList.toggle('portrait', innerHeight > innerWidth && o.rotate !== false);
+        if (api.onFit) api.onFit();
+      };
+      api.begin = () => { const v = api.view, g = api.g; g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = o.bg || '#e6ecf7'; g.fillRect(0, 0, v.w, v.h); if (api.world) g.setTransform(v.s, 0, 0, v.s, v.ox, v.oy); };
+      api.toWorld = (e) => { const r = api.cv.getBoundingClientRect(), v = api.view; return { x: ((e.clientX - r.left) * v.d - v.ox) / v.s, y: ((e.clientY - r.top) * v.d - v.oy) / v.s }; };
+      api.play = () => { api.scr.classList.toggle('touch', LSPG.isTouch()); api.closeModal(); api.paused = false; api.over = false; show('s-' + k); api.fit(); };
+      api.run = (step) => {
+        cancelAnimationFrame(api.raf); let last = performance.now();
+        const f = (t) => { if (!LSPG.isActive('s-' + k)) { api.raf = 0; return; } api.raf = requestAnimationFrame(f); const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; step(api.paused ? 0 : dt); };
+        api.raf = requestAnimationFrame(f);
+      };
+      api.stop = () => { cancelAnimationFrame(api.raf); api.raf = 0; api.closeModal(); for (const x in api.keys) api.keys[x] = false; for (const x in api.tin) api.tin[x] = false; };
+      api.togglePause = () => {
+        if (api.over) return;
+        if (api.paused) { api.paused = false; api.closeModal(); return; }
+        api.paused = true;
+        api.modal(`<h2>Paused</h2><p class="muted">${o.quitNote || 'Quitting ends this round without points.'}</p><div class="modal-actions"><button class="btn primary" data-a="resume">Resume</button><button class="btn ghost" data-a="quit">Quit</button></div>`,
+          { resume: api.togglePause, quit: () => { if (api.onQuit) api.onQuit(); api.openLobby(); } });
+      };
+      api.end = (title, got, text, buttons) => {
+        api.over = true; refreshPoints();
+        const acts = {}, html = (buttons || [['again', 'Play again', 'primary'], ['lobby', 'Back', 'ghost']]).map(([id, label, cls, fn]) => { acts[id] = fn || (id === 'lobby' ? () => api.openLobby() : () => api.onAgain && api.onAgain()); return `<button class="btn ${cls || 'ghost'}" data-a="${id}">${label}</button>`; }).join('');
+        api.modal(`<h2>${title}</h2>${got != null ? `<p class="big">⭐ +${got.toLocaleString()}</p>` : ''}<p class="muted">${text || ''}</p><div class="modal-actions">${html}</div>`, acts);
+      };
+      $('#' + k + '-pause').onclick = api.togglePause;
+      $('#' + k + '-back').onclick = () => { api.stop(); if (api.onLeave) api.onLeave(); enterHub(); };
+      LSPG.holdButtons('#s-' + k, api.tin);
+      addEventListener('keydown', (e) => {
+        if (!LSPG.isActive('s-' + k)) return;
+        if (e.code === 'Escape' || e.code === 'KeyP') { api.togglePause(); return; }
+        api.keys[e.code] = true; if (api.onKey) api.onKey(e.code);
+        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      });
+      addEventListener('keyup', (e) => { api.keys[e.code] = false; });
+      addEventListener('blur', () => { for (const x in api.keys) api.keys[x] = false; });
+      addEventListener('resize', () => { if (LSPG.isActive('s-' + k)) api.fit(); });
+      api.cv.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' && !api.scr.classList.contains('touch')) { api.scr.classList.add('touch'); api.fit(); } });
+      LSPG.addCard({ id: 'card-' + k, emoji: o.emoji, bg: o.cardBg, title: o.title, desc: o.desc, grid: o.grid, open: () => api.openLobby() });
+      if (o.progress) LSPG.onHub(() => LSPG.setProg('card-' + k, o.progress()));
+      return api;
+    },
+    /* Simple buy/equip shop rows for anything with {id,name,icon,cost,desc} */
+    shopCards(list, owned, current, attr) {
+      const pts = Wallet.get();
+      return list.map((s) => {
+        const has = owned.includes(s.id), on = current === s.id;
+        const btn = on ? '<button class="btn ghost" disabled>Equipped</button>' : has ? `<button class="btn primary" ${attr}="${s.id}">Use</button>` : `<button class="btn gold" ${attr}="${s.id}" ${pts < s.cost ? 'disabled' : ''}>Buy for ⭐ ${s.cost.toLocaleString()}</button>`;
+        return `<div class="item${on ? ' eq' : ''}"><div class="item-head"><div class="ico">${s.icon}</div><div><h3>${s.name}</h3><p>${s.desc || ''}</p></div></div>${btn}</div>`;
+      }).join('');
+    },
+    bindBuy(attr, list, S, save, rerender, ownedKey, curKey) {
+      $$('[' + attr + ']').forEach((b) => (b.onclick = () => {
+        const it = list.find((x) => x.id === b.getAttribute(attr));
+        if (!S[ownedKey].includes(it.id)) { if (!Wallet.spend(it.cost)) return; S[ownedKey].push(it.id); toast(it.name + ' unlocked'); }
+        S[curKey] = it.id; save(); rerender();
+      }));
+    },
+    bindUpg(attr, S, costs, save, rerender) {
+      $$('[' + attr + ']').forEach((b) => (b.onclick = () => { const id = b.getAttribute(attr), c = costs[S.upg[id]]; if (!Wallet.spend(c)) return; S.upg[id]++; save(); rerender(); toast('Upgrade installed'); }));
+    },
+    playCard(icon, title, text, stats, btnId, btnLabel) {
+      return `<div class="item" style="margin-top:18px;max-width:560px"><div class="item-head"><div class="ico">${icon}</div><div><h3>${title}</h3><p>${text}</p></div></div><div class="statline">${stats.map((x) => `<span class="pill">${x}</span>`).join('')}</div><button class="btn primary" id="${btnId}">${btnLabel || 'Play'}</button></div>`;
     },
   };
 })();

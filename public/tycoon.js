@@ -276,6 +276,6 @@
   addEventListener('resize', () => { if (L.isActive('s-tycoon')) L.fit(cv); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && TS && profile) tsave(); });
 
-  L.addCard({ id: 'card-tycoon', emoji: '🧱', bg: '#fff2d9', title: 'Block Tycoon', desc: 'Build a block factory, grow your cash, and rebirth for points.', open });
+  L.addCard({ grid: 'sim-games', id: 'card-tycoon', emoji: '🧱', bg: '#fff2d9', title: 'Block Tycoon', desc: 'Build a block factory, grow your cash, and rebirth for points.', open });
   L.onHub(() => { tload(); L.setProg('card-tycoon', TS.rebirths ? `${TS.rebirths} rebirth${TS.rebirths > 1 ? 's' : ''}, ${money(TS.cash)} cash` : `${TS.bought.length} of ${ITEMS.length} built`); });
 })();

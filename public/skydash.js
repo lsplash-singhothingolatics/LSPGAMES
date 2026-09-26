@@ -326,6 +326,6 @@
   $('#sd-go').onclick = startRun;
   $('#sd-back').onclick = () => enterHub();
 
-  L.addCard({ id: 'card-sky', emoji: '🚀', bg: '#ece6ff', title: 'Sky Dash', desc: 'Hold to fly a rocket through zappers, birds and missiles.', open: () => openLobby('fly') });
+  L.addCard({ grid: 'arcade-games', id: 'card-sky', emoji: '🚀', bg: '#ece6ff', title: 'Sky Dash', desc: 'Hold to fly a rocket through zappers, birds and missiles.', open: () => openLobby('fly') });
   L.onHub(() => { sload(); L.setProg('card-sky', SS.best ? `Best flight ${SS.best.toLocaleString()} m` : 'Not flown yet'); });
 })();

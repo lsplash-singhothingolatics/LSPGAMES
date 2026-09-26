@@ -413,6 +413,6 @@
   function openLobby(tab) { oload(); show('s-olobby'); setTab(tab || 'stages'); }
   $('#ob-back').onclick = () => enterHub();
 
-  L.addCard({ id: 'card-obby', emoji: '🏃', bg: '#ffe6ea', title: 'Obby Rush', desc: 'Jump, dodge lava and ride platforms through 8 obstacle courses.', open: () => openLobby('stages') });
+  L.addCard({ grid: 'arcade-games', id: 'card-obby', emoji: '🏃', bg: '#ffe6ea', title: 'Obby Rush', desc: 'Jump, dodge lava and ride platforms through 8 obstacle courses.', open: () => openLobby('stages') });
   L.onHub(() => { oload(); L.setProg('card-obby', OS.best[STAGES.length] ? 'All 8 stages cleared!' : `Stage ${OS.unlocked} of ${STAGES.length} unlocked`); });
 })();
