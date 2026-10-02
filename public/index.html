@@ -169,6 +169,27 @@ select:focus,input:focus{border-color:var(--brand);outline:none}
 .standings{list-style:none;padding:0;margin:14px 0 0;text-align:left;font-weight:700;font-size:15px}
 .standings li{display:flex;justify-content:space-between;padding:5px 10px;border-radius:8px}
 .standings li.me{background:#eef3ff;color:var(--brand)}
+.buy-pill{cursor:pointer;font:inherit;font-weight:800;color:var(--ink)}
+.buy-pill .plus{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--mint);color:#fff;font-size:16px;line-height:1;margin-left:2px}
+.st-packs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:18px}
+.st-pack{background:#fff;border:2px solid var(--line);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:8px;box-shadow:0 5px 0 var(--line);position:relative}
+.st-pack.best{border-color:var(--gold);box-shadow:0 5px 0 #ffd88a}
+.st-pack .pts{font-family:Fredoka,system-ui,sans-serif;font-size:32px;font-weight:700;line-height:1.1}
+.st-pack .price{font-size:20px;font-weight:800}
+.st-pack .per{font-size:13px;color:var(--muted);font-weight:700}
+.st-ribbon{position:absolute;top:-12px;right:16px;background:var(--gold);color:var(--ink);font-weight:800;font-size:12px;padding:3px 10px;border-radius:99px}
+.st-custom input{width:100%;height:50px;border:2px solid var(--line);border-radius:12px;padding:0 14px;font:700 18px Nunito,system-ui,sans-serif;color:var(--ink)}
+.st-custom input:focus{border-color:var(--brand);outline:none}
+.st-note{display:flex;gap:10px;align-items:flex-start;background:#eef3ff;border-radius:14px;padding:12px 14px;margin-top:18px;font-size:14px;font-weight:700}
+.st-note.warn{background:#fff3dc}
+.st-parent{display:flex;gap:10px;align-items:flex-start;font-weight:700;font-size:15px;margin-top:14px}
+.st-parent input{width:22px;height:22px;margin-top:2px;flex:none}
+.st-history{display:grid;gap:8px;margin-top:12px}
+.st-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;border:2px solid var(--line);border-radius:14px;padding:10px 14px;font-weight:700;font-size:14px;flex-wrap:wrap}
+.chip{font-size:12px;font-weight:800;padding:3px 10px;border-radius:99px}
+.chip.paid{background:#e3faf3;color:#0b8f6e}.chip.pending{background:#fff3dc;color:#9a6a00}.chip.failed{background:#ffe3e6;color:#c9303f}.chip.refunded{background:#eef3ff;color:#1f4fd1}
+.st-done{background:#fff;border:2px solid var(--line);border-radius:20px;padding:20px;margin-top:6px;margin-bottom:10px;text-align:center}
+.st-done .big{font-family:Fredoka,system-ui,sans-serif;font-size:34px;font-weight:700;color:#e89a00}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -240,13 +261,14 @@ select:focus,input:focus{border-color:var(--brand);outline:none}
   <header class="topbar"><div class="topbar-in">
     <div class="logo"><span class="mark">▶</span>LSPGames</div>
     <div class="spacer"></div>
-    <span class="pill" title="Points">⭐ <span class="js-points">0</span></span>
+    <button class="pill buy-pill" id="open-store" title="Get more points">⭐ <span class="js-points">0</span><span class="plus" aria-hidden="true">+</span></button>
     <button class="avatar" id="avatar-btn" aria-label="Account menu">P</button>
   </div></header>
   <div class="menu" id="menu">
     <b id="menu-email"></b>
     <p class="muted" id="menu-age" style="font-size:14px"></p>
     <p class="walletcap">⭐ <span class="js-points">0</span> of 10,000,000 max points</p>
+    <button class="btn primary" id="menu-store">⭐ Get points</button>
     <button class="btn ghost" id="logout">Sign out</button>
   </div>
   <main class="wrap">
@@ -361,6 +383,20 @@ select:focus,input:focus{border-color:var(--brand);outline:none}
   <div class="modal" id="kmodal"><div class="modal-card" id="kmodal-card"></div></div>
 </section>
 
+<section class="screen" id="s-store" style="overflow:auto">
+  <header class="topbar"><div class="topbar-in">
+    <button class="iconbtn" id="st-back" aria-label="Back to games">‹</button>
+    <h2 style="font-size:20px">Get points</h2><div class="spacer"></div>
+    <span class="pill" title="Points">⭐ <span class="js-points">0</span></span>
+  </div></header>
+  <main class="wrap">
+    <div id="st-status"></div>
+    <div id="st-body"><p class="muted">Loading the store…</p></div>
+    <h2 class="section-title">Your purchases</h2>
+    <div id="st-history" class="st-history"><p class="muted">No purchases yet.</p></div>
+  </main>
+</section>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -434,7 +470,7 @@ async function verify(){
   verifying=true;const btn=$('#otp-verify');setBusy(btn,true);
   try{
     const d=await api('/api/verify-otp',{email:pending.email,code});
-    store.set('lsp_token',d.token);profile={email:d.email,dob:d.dob};store.set('lsp_profile',profile);
+    store.set('lsp_token',d.token);profile={email:d.email,dob:d.dob};store.set('lsp_profile',profile);await afterLogin(d);
     $('#otp-err').textContent='';enterHub();toast('Verified. Welcome to LSPGames!');
   }catch(e){$('#otp-err').textContent=e.message;const o=$('.otp');o.classList.remove('shake');void o.offsetWidth;o.classList.add('shake');clearOtp()}
   finally{verifying=false;setBusy(btn,false,'Verify and play')}
@@ -442,13 +478,29 @@ async function verify(){
 
 /* ================= hub ================= */
 const POINTS_MAX=10000000;
+/* Points live on the server. This keeps a local copy so games stay snappy, and sends every change to the server in order. */
 const Wallet={
-  key(){return 'lsp_wallet_'+profile.email},
-  get(){return Math.max(0,Math.min(POINTS_MAX,Math.floor(Number(store.get(this.key(),0))||0)))},
-  set(v){store.set(this.key(),Math.max(0,Math.min(POINTS_MAX,Math.floor(v))));refreshPoints()},
-  add(n){n=Math.max(0,Math.floor(n));const before=this.get(),after=Math.min(POINTS_MAX,before+n);this.set(after);if(before+n>POINTS_MAX)toast('You hit the 10,000,000 point limit');return after-before},
-  spend(n){const p=this.get();if(p<n)return false;this.set(p-n);return true}
+  v:0,q:[],busy:false,limitWarned:false,
+  get(){return this.v},
+  sync(p){this.v=Math.max(0,Math.min(POINTS_MAX,Math.floor(Number(p)||0)));refreshPoints()},
+  add(n){n=Math.max(0,Math.floor(n));const before=this.v,after=Math.min(POINTS_MAX,before+n);this.v=after;refreshPoints();if(before+n>POINTS_MAX)toast('You hit the 10,000,000 point limit');if(after>before)this.push('earn',after-before);return after-before},
+  spend(n){n=Math.floor(n);if(!(n>0)||this.v<n)return false;this.v-=n;refreshPoints();this.push('spend',n);return true},
+  push(t,n){const last=this.q[this.q.length-1];if(t==='earn'&&last&&last.t==='earn'&&!last.sent)last.n+=n;else this.q.push({t,n,tries:0});this.run()},
+  async run(){
+    if(this.busy)return;this.busy=true;
+    try{while(this.q.length){const op=this.q[0];op.sent=true;
+      try{const r=await api('/api/wallet/'+op.t,{amount:op.n});this.q.shift();
+        if(op.t==='earn'&&r.added<op.n&&!this.limitWarned){this.limitWarned=true;toast("You've hit today's limit for points from games. Bought points still work. Come back tomorrow!",4500)}
+        if(!this.q.length)this.sync(r.points);}
+      catch(e){if(op.t==='spend'||++op.tries>=4){this.q.shift();try{const w=await api('/api/wallet');if(!this.q.length)this.sync(w.points)}catch(_){}}else await new Promise(r=>setTimeout(r,2500*op.tries))}}}
+    finally{this.busy=false}
+  }
 };
+async function afterLogin(me){
+  Wallet.sync(me.points);
+  if(!me.migrated){const k='lsp_wallet_'+me.email,old=Math.floor(Number(store.get(k,0))||0);
+    try{const r=await api('/api/wallet/migrate',{amount:old});Wallet.sync(r.points);store.del(k);if(r.added>0)toast(`Moved your ${r.added.toLocaleString()} saved points to your account`,3500)}catch(e){}}
+}
 function loadSave(){S=Object.assign({owned:['pistol'],equipped:'pistol',unlocked:1,cleared:0,kills:0},store.get('lsp_save_'+profile.email,{}));S.upg=Object.assign({dmg:0,rate:0,hp:0,speed:0},S.upg||{});
   if(S.points){Wallet.add(S.points);delete S.points;save()}}
 function save(){store.set('lsp_save_'+profile.email,S)}
@@ -701,10 +753,82 @@ function drawHubArt(){
   const s=Math.max(cvs.width/W,cvs.height/H);draw(cvs.getContext('2d'),scene,{s,ox:(cvs.width-W*s)/2,oy:(cvs.height-H*s)/2});
 }
 
+/* ================= points store ================= */
+let STORE=null;
+const rs=(n)=>'₹'+Number(n).toLocaleString('en-IN');
+async function openStore(returnId){
+  $('#menu').classList.remove('open');show('s-store');refreshPoints();$('#st-status').innerHTML='';
+  try{STORE=await api('/api/store')}catch(e){$('#st-body').innerHTML=`<p class="err">${e.message}</p>`;return}
+  renderStore();loadHistory();if(returnId)watchPayment(returnId);
+}
+function renderStore(){
+  const S2=STORE,under18=profile.dob&&ageOf(profile.dob)<18;
+  if(!S2.enabled){$('#st-body').innerHTML='<div class="st-note">🛒 <span>Buying points is coming soon. Keep playing to earn points for free!</span></div>';return}
+  $('#st-body').innerHTML=`
+    ${S2.demo?`<div class="st-note warn">🧪 <span>Test mode: ${S2.gateway} is a demo gateway, so no real money is taken.${S2.newTab?' Test card 4111 1111 1111 1111 or any UPI ID like someone@okbank.':''}</span></div>`:''}
+    <div class="st-packs">${S2.packs.map(p=>`<div class="st-pack${p.tag?' best':''}">${p.tag?`<span class="st-ribbon">${p.tag}</span>`:''}
+      <div class="pts">⭐ ${p.points.toLocaleString('en-IN')}</div><div class="price">${rs(p.price)}</div>
+      <div class="per">${Math.round(p.points/p.price)} points per ₹1</div>
+      <button class="btn gold" data-pack="${p.id}">Buy for ${rs(p.price)}</button></div>`).join('')}
+      <div class="st-pack st-custom"><div class="pts" style="font-size:24px">Pick your amount</div>
+        <label for="st-amt" style="margin:0">How many points?</label>
+        <input id="st-amt" type="number" inputmode="numeric" min="${S2.minRs*S2.rate}" step="1" placeholder="e.g. 5000">
+        <div class="price" id="st-cost">${S2.rate} points per ₹1</div>
+        <button class="btn primary" id="st-buy-custom" disabled>Buy</button></div></div>
+    ${under18?`<label class="st-parent"><input type="checkbox" id="st-parent"> <span>A parent or guardian is with me and says it's OK to buy points.</span></label>`:''}
+    <p class="err" id="st-err" role="alert"></p>
+    <div class="st-note">🔒 <span>Payments are handled securely by ${S2.gateway}. LSPGames never sees your card or bank details. Points are added as soon as your payment is confirmed.</span></div>`;
+  const amt=$('#st-amt'),cost=$('#st-cost'),bc=$('#st-buy-custom');
+  amt.oninput=()=>{const n=Math.floor(Number(amt.value)||0),r=Math.ceil(n/S2.rate);
+    if(!n){cost.textContent=`${S2.rate} points per ₹1`;bc.disabled=true;return}
+    if(r<S2.minRs){cost.textContent=`Minimum is ${(S2.minRs*S2.rate).toLocaleString('en-IN')} points (${rs(S2.minRs)})`;bc.disabled=true;return}
+    if(r>S2.maxRs){cost.textContent=`Maximum is ${rs(S2.maxRs)} per purchase`;bc.disabled=true;return}
+    cost.textContent=`You pay ${rs(r)}`;bc.disabled=false;bc.textContent=`Buy ${n.toLocaleString('en-IN')} for ${rs(r)}`};
+  bc.onclick=()=>startPay({points:Math.floor(Number(amt.value))},bc);
+  $$('[data-pack]').forEach(b=>b.onclick=()=>startPay({pack:b.dataset.pack},b));
+}
+async function startPay(body,btn){
+  const err=$('#st-err');err.textContent='';
+  const pc=$('#st-parent');if(pc&&!pc.checked){err.textContent='Please ask a parent or guardian, then tick the box.';pc.focus();return}
+  body.parentOk=pc?pc.checked:false;
+  const label=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
+  // Open the tab right away (inside the click) so pop-up blockers allow it, then point it at checkout.
+  const tab=STORE.newTab?window.open('about:blank','_blank'):null;
+  try{const d=await api('/api/pay/create',body);
+    if(d.newTab){let opened=false;try{if(tab&&!tab.closed){tab.location.href=d.paymentUrl;opened=true}}catch(_){}
+      btn.disabled=false;btn.textContent=label;window.scrollTo(0,0);watchPayment(d.orderId,d.paymentUrl,opened)}
+    else location.href=d.paymentUrl}
+  catch(e){if(tab)try{tab.close()}catch(_){};err.textContent=e.message;btn.disabled=false;btn.textContent=label}
+}
+async function loadHistory(){
+  try{const list=await api('/api/pay/history');
+    $('#st-history').innerHTML=list.length?list.map(o=>`<div class="st-row"><span>⭐ ${o.points.toLocaleString('en-IN')} for ${rs(o.amount/100)}</span><span class="muted" style="font-size:13px">${new Date(o.createdAt).toLocaleDateString()} · ${o.orderId}</span><span class="chip ${o.status}">${o.status==='paid'?'Paid':o.status==='pending'?'Waiting':o.status==='refunded'?'Refunded':'Not completed'}</span></div>`).join(''):'<p class="muted">No purchases yet.</p>';
+  }catch(e){}
+}
+let watching=null;
+async function watchPayment(id,url,opened){
+  const box=$('#st-status');const t0=Date.now(),me={};watching=me;
+  const link=url?`<p class="muted" style="margin-top:8px">${opened?'Checkout opened in a new tab. Pay there, then come back here.':'Open the checkout to pay:'}</p><a class="btn ${opened?'ghost':'primary'}" href="${url}" target="_blank" rel="noopener" style="text-decoration:none;margin-top:6px">${opened?'Open checkout again':'Open LSP-Pay checkout'}</a>`:'';
+  box.innerHTML=`<div class="st-done"><p style="font-weight:800">${url?'Waiting for your payment…':'Checking your payment…'}</p><span class="spin" style="display:inline-block;border-color:rgba(47,107,255,.3);border-top-color:var(--brand)"></span>${link}</div>`;
+  const limit=url?31*60000:90000;
+  while(Date.now()-t0<limit&&watching===me&&$('#s-store').classList.contains('active')){
+    try{const o=await api('/api/pay/status/'+encodeURIComponent(id));
+      if(o.status==='paid'){Wallet.sync(o.balance);box.innerHTML=`<div class="st-done"><p style="font-weight:800">Payment successful!</p><div class="big">+⭐ ${o.points.toLocaleString('en-IN')}</div><p class="muted">The points are in your account. Have fun!</p></div>`;loadHistory();return}
+      if(o.status==='failed'||o.status==='refunded'){box.innerHTML='<div class="st-done"><p style="font-weight:800">The payment was not completed</p><p class="muted">No points were added. If money left your account, it will be refunded by the payment gateway.</p></div>';loadHistory();return}
+    }catch(e){box.innerHTML=`<div class="st-done"><p class="err">${e.message}</p></div>`;return}
+    await new Promise(r=>setTimeout(r,url?3000:2000));
+  }
+  if(watching!==me||!$('#s-store').classList.contains('active'))return;
+  box.innerHTML='<div class="st-done"><p style="font-weight:800">Still waiting for confirmation</p><p class="muted">Your points will be added automatically once the payment is confirmed. Check back in a few minutes.</p></div>';loadHistory();
+}
+$('#open-store').onclick=()=>openStore();
+$('#menu-store').onclick=()=>openStore();
+$('#st-back').onclick=()=>enterHub();
+
 /* ================= boot ================= */
 (async()=>{
   const tok=store.get('lsp_token');
-  if(tok){try{const me=await api('/api/me');profile={email:me.email,dob:me.dob};store.set('lsp_profile',profile);enterHub();return}catch(e){store.del('lsp_token')}}
+  if(tok){try{const me=await api('/api/me');profile={email:me.email,dob:me.dob};store.set('lsp_profile',profile);await afterLogin(me);enterHub();const pay=new URLSearchParams(location.search).get('payment');if(pay){history.replaceState(null,'',location.pathname);openStore(pay)}return}catch(e){store.del('lsp_token')}}
   show('s-dob');
 })();
 </script>

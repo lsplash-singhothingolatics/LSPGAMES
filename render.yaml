@@ -17,3 +17,21 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: GATEWAY_MODE
+        value: lsppay
+      - key: LSP_PAY_URL
+        value: https://lsp-pay.onrender.com
+      - key: LSP_PAY_KEY_ID
+        sync: false
+      - key: LSP_PAY_SECRET
+        sync: false
+      - key: LSP_WEBHOOK_SECRET
+        sync: false
+      - key: GATEWAY_CREATE_URL
+        sync: false
+      - key: GATEWAY_SECRET
+        sync: false
+      - key: PUBLIC_URL
+        value: https://lspgames.onrender.com

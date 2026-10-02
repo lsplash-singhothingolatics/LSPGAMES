@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo payment</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f3f6fc;font:500 16px/1.5 system-ui,sans-serif;color:#16203d;padding:16px;box-sizing:border-box}
+.card{background:#fff;border:2px solid #dfe5f1;border-radius:24px;padding:28px;max-width:380px;width:100%;text-align:center}
+.tag{display:inline-block;background:#fff2d9;color:#9a6a00;font-weight:800;font-size:13px;padding:4px 12px;border-radius:99px}
+h1{font-size:24px;margin:14px 0 4px}.amt{font-size:40px;font-weight:800;margin:10px 0}
+button{width:100%;height:52px;border-radius:14px;border:0;font:700 18px system-ui,sans-serif;margin-top:10px;cursor:pointer}
+.pay{background:#14c79a;color:#fff}.no{background:#fff;border:2px solid #dfe5f1;color:#16203d}p{color:#66708f;font-size:14px}
+</style></head><body>
+<div class="card"><span class="tag">DEMO GATEWAY: no real money</span><h1 id="label">Loading…</h1><div class="amt" id="amt"></div>
+<button class="pay" id="pay">Pay (test)</button><button class="no" id="cancel">Cancel</button>
+<p>This page only exists in demo mode. Your real gateway replaces it when you switch GATEWAY_MODE to live.</p></div>
+<script>
+const id=new URLSearchParams(location.search).get('order');
+fetch('/api/demo-gateway/order/'+encodeURIComponent(id)).then(r=>r.json()).then(o=>{document.getElementById('label').textContent=o.label||'Order not found';if(o.amount)document.getElementById('amt').textContent='₹'+(o.amount/100).toLocaleString('en-IN')});
+async function done(pay){const r=await fetch('/api/demo-gateway/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_id:id,pay})});const d=await r.json();location.href=d.return_url||'/';}
+document.getElementById('pay').onclick=()=>done(true);document.getElementById('cancel').onclick=()=>done(false);
+</script></body></html>
