@@ -238,7 +238,10 @@ const PACKS = [
   { id: 'p40k', points: 40000, price: 1609 },
 ];
 const RATE = 45, MIN_RS = 10, MAX_RS = 10000;
-const GATEWAY_MODE = (process.env.GATEWAY_MODE || 'off').toLowerCase(); // off | demo | live | lsppay
+// off | demo | live | lsppay  ("lsp-pay", "LSP Pay" etc. also accepted)
+const GATEWAY_MODE_RAW = String(process.env.GATEWAY_MODE || 'off').trim();
+const GATEWAY_MODE = (() => { const m = GATEWAY_MODE_RAW.toLowerCase().replace(/[^a-z]/g, ''); return ['off', 'demo', 'live', 'lsppay'].includes(m) ? m : 'off'; })();
+if (!['off', 'demo', 'live', 'lsppay'].includes(GATEWAY_MODE_RAW.toLowerCase().replace(/[^a-z]/g, ''))) console.warn(`GATEWAY_MODE "${GATEWAY_MODE_RAW}" is not recognised, so payments are OFF. Use lsppay, demo, live or off.`);
 const LSP = { url: (process.env.LSP_PAY_URL || 'https://lsp-pay.onrender.com').replace(/\/$/, ''), key: process.env.LSP_PAY_KEY_ID || '', secret: process.env.LSP_PAY_SECRET || '', hook: process.env.LSP_WEBHOOK_SECRET || '' };
 const lspAuth = () => 'Basic ' + Buffer.from(LSP.key + ':' + LSP.secret).toString('base64');
 const GATEWAY_SECRET = process.env.GATEWAY_SECRET || (GATEWAY_MODE === 'demo' ? 'demo-secret' : '');
@@ -276,12 +279,34 @@ app.post('/api/pay/create', auth, async (req, res) => {
 
   if (GATEWAY_MODE === 'lsppay') {
     try {
-      const r = await fetch(LSP.url + '/api/v1/orders', {
-        method: 'POST',
-        headers: { Authorization: lspAuth(), 'Content-Type': 'application/json', 'Idempotency-Key': orderId },
-        body: JSON.stringify({ amount: rupees, description: `LSPGames: ${label}`, reference: orderId, customer_email: email, items: [{ name: label, qty: 1, unit: rupees }] }),
-      });
-      const data = await r.json().catch(() => ({}));
+      // LSP-Pay may be asleep on Render's free plan: wait up to ~70s, retrying on network errors and 5xx.
+      // Safe to retry because the Idempotency-Key makes LSP-Pay return the same order.
+      const payload = JSON.stringify({ amount: rupees, description: `LSPGames: ${label}`, reference: orderId, customer_email: email, items: [{ name: label, qty: 1, unit: rupees }] });
+      let r, data = {}, lastErr = '';
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          r = await fetch(LSP.url + '/api/v1/orders', {
+            method: 'POST', signal: AbortSignal.timeout(25000),
+            headers: { Authorization: lspAuth(), 'Content-Type': 'application/json', 'Idempotency-Key': orderId },
+            body: payload,
+          });
+          data = await r.json().catch(() => ({}));
+          if (r.status === 429) {
+            // LSP-Pay asked us to slow down: wait as long as it says (max 15s), then try again.
+            const wait = Math.min(15, Math.max(2, Number(r.headers.get('retry-after')) || 5));
+            lastErr = `HTTP 429 (rate limited, waiting ${wait}s)`; console.warn(`LSP-Pay attempt ${attempt} failed: ${lastErr}`);
+            if (attempt < 3) { await new Promise((ok) => setTimeout(ok, wait * 1000)); continue; }
+            break;
+          }
+          if (r.status < 500) break;
+          lastErr = 'HTTP ' + r.status;
+        } catch (e) { lastErr = e.name === 'TimeoutError' ? 'timed out (LSP-Pay may be waking up)' : e.message; r = null; }
+        console.warn(`LSP-Pay attempt ${attempt} failed: ${lastErr}`);
+        if (attempt < 3) await new Promise((ok) => setTimeout(ok, 3000));
+      }
+      if (!r) throw new Error('no answer: ' + lastErr);
+      if (r.status === 429) { lspCooldownUntil = Date.now() + 30000; throw new Error('LSP-Pay said 429: still rate limited after 3 tries. LSP-Pay is limiting how many API requests LSPGames can make.'); }
+      if (r.status === 401 || r.status === 403) throw new Error(`LSP-Pay said ${r.status}: LSP_PAY_KEY_ID or LSP_PAY_SECRET is wrong. ${JSON.stringify(data).slice(0, 200)}`);
       if (!r.ok || !data.id || !/^https:\/\//.test(data.checkoutUrl || '') || Number(data.amount) !== rupees) throw new Error('LSP-Pay said ' + r.status + ' ' + JSON.stringify(data).slice(0, 300));
       await db.setOrder(orderId, { gatewayOrderId: data.id });
       return res.json({ orderId, paymentUrl: data.checkoutUrl, newTab: true });
@@ -351,12 +376,16 @@ app.post('/api/pay/lsp-webhook', async (req, res) => {
   catch (e) { console.error('LSP-Pay webhook error:', e.message); res.sendStatus(500); }
 });
 const lastPoll = new Map();
+let lspCooldownUntil = 0; // after a 429, stop polling LSP-Pay for a while
 async function pollLsp(o) {
   if (GATEWAY_MODE !== 'lsppay' || o.status !== 'pending' || !o.gatewayOrderId) return;
-  if (Date.now() - (lastPoll.get(o.orderId) || 0) < 3000) return;
+  // With a webhook secret set, the webhook does the work and we only poll as a slow safety net.
+  const every = LSP.hook ? 30000 : 8000;
+  if (Date.now() < lspCooldownUntil || Date.now() - (lastPoll.get(o.orderId) || 0) < every) return;
   lastPoll.set(o.orderId, Date.now());
   try {
-    const r = await fetch(`${LSP.url}/api/v1/orders/${encodeURIComponent(o.gatewayOrderId)}`, { headers: { Authorization: lspAuth() } });
+    const r = await fetch(`${LSP.url}/api/v1/orders/${encodeURIComponent(o.gatewayOrderId)}`, { headers: { Authorization: lspAuth() }, signal: AbortSignal.timeout(15000) });
+    if (r.status === 429) { lspCooldownUntil = Date.now() + 30000; console.warn('LSP-Pay rate limited a status check; pausing checks for 30s'); return; }
     if (r.ok) await applyLspOrder(null, await r.json());
   } catch (e) { console.error('LSP-Pay poll failed:', e.message); }
 }
